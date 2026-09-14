@@ -1,16 +1,21 @@
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createGitHubServer, sessions } from "../lib/server.js";
 import { authenticate } from "../lib/auth.js";
 
 /**
  * Serverless handler para el endpoint SSE de MCP con capa de seguridad.
- * Establece el stream SSE únicamente para clientes autorizados.
+ * Establece el stream SSE únicamente para clientes autorizados y soporta POST directo.
  */
 export default async function handler(req, res) {
   // Configuración de CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-bridge-token, x-api-key");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, x-bridge-token, x-api-key, mcp-session-id, Last-Event-ID, mcp-protocol-version"
+  );
+  res.setHeader("Access-Control-Expose-Headers", "mcp-session-id, mcp-protocol-version");
 
   if (req.method === "OPTIONS") {
     return res.status(204).end();
@@ -19,7 +24,7 @@ export default async function handler(req, res) {
   // 1. Verificación de seguridad del puente (Token secreto)
   const auth = authenticate(req, res);
   if (!auth.authenticated) {
-    return; // authenticate ya envió la respuesta 401 / 500
+    return;
   }
 
   // 2. Validación de presencia del token de GitHub
@@ -32,7 +37,6 @@ export default async function handler(req, res) {
 
   // 3. Manejo de conexión SSE mediante GET
   if (req.method === "GET") {
-    // Encabezados requeridos para SSE y streaming sin buffer en Vercel
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
@@ -77,29 +81,34 @@ export default async function handler(req, res) {
     });
   }
 
-  // 4. Soporte de respaldo: procesar POST directo si el cliente envía a /api/sse
+  // 4. Procesar POST directo a /api/sse de forma sin estado (Stateless Streamable HTTP)
   if (req.method === "POST") {
-    const sessionId =
-      req.query?.sessionId ||
-      new URL(req.url, `http://${req.headers.host}`).searchParams.get("sessionId");
-
-    if (!sessionId) {
-      return res.status(400).json({ error: "Missing sessionId query parameter" });
-    }
-
-    const session = sessions.get(sessionId);
-    if (!session) {
-      return res.status(404).json({ error: `Session not found or expired: ${sessionId}` });
+    if (!req.headers["accept"] || !req.headers["accept"].includes("text/event-stream")) {
+      req.headers["accept"] = "application/json, text/event-stream";
     }
 
     try {
-      const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-      await session.transport.handleMessage(body);
-      return res.status(202).send("Accepted");
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+      });
+      const server = createGitHubServer();
+      await server.connect(transport);
+
+      await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      console.error("[SSE POST Fallback] Error:", error);
-      return res.status(500).json({ error: error.message || "Failed to process message" });
+      console.error("[SSE POST Handler Error]:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32603,
+            message: error.message || "Failed to process POST message in SSE endpoint.",
+          },
+          id: null,
+        });
+      }
     }
+    return;
   }
 
   res.setHeader("Allow", ["GET", "POST", "OPTIONS"]);

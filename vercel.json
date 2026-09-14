@@ -7,6 +7,9 @@
     },
     "api/messages.js": {
       "maxDuration": 60
+    },
+    "api/mcp.js": {
+      "maxDuration": 60
     }
   }
 }
