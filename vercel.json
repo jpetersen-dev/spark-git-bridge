@@ -2,6 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "functions": {
+    "api/index.js": {
+      "maxDuration": 15
+    },
     "api/sse.js": {
       "maxDuration": 60
     },
@@ -11,5 +14,10 @@
     "api/mcp.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/api/index.js" },
+    { "source": "/api/mcp/:token", "destination": "/api/mcp.js" },
+    { "source": "/api/sse/:token", "destination": "/api/sse.js" }
+  ]
 }

@@ -5,12 +5,14 @@ import { authenticate } from "../lib/auth.js";
 
 /**
  * Serverless handler para el endpoint SSE de MCP con capa de seguridad.
- * Establece el stream SSE únicamente para clientes autorizados y soporta POST directo.
+ * Establece el stream SSE únicamente para clientes autorizados y soporta POST directo y HEAD.
  */
 export default async function handler(req, res) {
+  console.log(`[SSE-INCOMING] ${req.method} ${req.url}`);
+
   // Configuración de CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, x-bridge-token, x-api-key, mcp-session-id, Last-Event-ID, mcp-protocol-version"
@@ -19,6 +21,11 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") {
     return res.status(204).end();
+  }
+
+  // Soporte para comprobaciones HEAD
+  if (req.method === "HEAD") {
+    return res.status(200).end();
   }
 
   // 1. Verificación de seguridad del puente (Token secreto)
@@ -35,14 +42,25 @@ export default async function handler(req, res) {
     });
   }
 
-  // 3. Manejo de conexión SSE mediante GET
+  // 3. Si es GET pero no solicita text/event-stream, responder con 200 OK JSON inmediato
+  // para evitar que un validador de URL se quede colgado en el stream y cause Runtime Timeout
+  const acceptHeader = req.headers["accept"] || "";
+  if (req.method === "GET" && !acceptHeader.includes("text/event-stream") && !req.headers["sec-fetch-dest"]?.includes("eventsource")) {
+    return res.status(200).json({
+      status: "ok",
+      name: "spark-git-bridge",
+      protocol: "mcp-sse",
+      version: "1.0.0",
+    });
+  }
+
+  // 4. Manejo de conexión SSE mediante GET
   if (req.method === "GET") {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
-    // Inyectamos el token en la URL de retorno para que el cliente continúe autenticado en cada POST
     const messagesEndpoint = auth.token
       ? `/api/messages?token=${encodeURIComponent(auth.token)}`
       : "/api/messages";
@@ -50,7 +68,6 @@ export default async function handler(req, res) {
     const transport = new SSEServerTransport(messagesEndpoint, res);
     const server = createGitHubServer();
 
-    // Conectar el servidor MCP al transporte
     await server.connect(transport);
 
     const sessionId = transport.sessionId;
@@ -58,7 +75,6 @@ export default async function handler(req, res) {
 
     console.log(`[SSE] Cliente autenticado conectado. Session ID: ${sessionId}`);
 
-    // Keep-alive periódico cada 15s para evitar cortes de conexión
     const keepAliveInterval = setInterval(() => {
       try {
         res.write(": keep-alive\n\n");
@@ -67,7 +83,6 @@ export default async function handler(req, res) {
       }
     }, 15000);
 
-    // Mantiene la Serverless Function activa mientras el stream esté abierto
     return new Promise((resolve) => {
       const cleanUp = () => {
         clearInterval(keepAliveInterval);
@@ -81,7 +96,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // 4. Procesar POST directo a /api/sse de forma sin estado (Stateless Streamable HTTP)
+  // 5. Procesar POST directo a /api/sse de forma sin estado
   if (req.method === "POST") {
     if (!req.headers["accept"] || !req.headers["accept"].includes("text/event-stream")) {
       req.headers["accept"] = "application/json, text/event-stream";
@@ -111,6 +126,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  res.setHeader("Allow", ["GET", "POST", "OPTIONS"]);
+  res.setHeader("Allow", ["GET", "POST", "HEAD", "OPTIONS"]);
   return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
 }
