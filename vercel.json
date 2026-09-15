@@ -17,7 +17,9 @@
   },
   "rewrites": [
     { "source": "/", "destination": "/api/index.js" },
+    { "source": "/api/mcp/:service/:token", "destination": "/api/mcp.js" },
     { "source": "/api/mcp/:token", "destination": "/api/mcp.js" },
+    { "source": "/api/sse/:service/:token", "destination": "/api/sse.js" },
     { "source": "/api/sse/:token", "destination": "/api/sse.js" }
   ]
 }

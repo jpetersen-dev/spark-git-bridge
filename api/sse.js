@@ -1,10 +1,21 @@
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createGitHubServer, sessions } from "../lib/server.js";
+import { createMcpServer, sessions } from "../lib/server.js";
 import { authenticate } from "../lib/auth.js";
 
+function resolveServices(req) {
+  const url = req.url || "";
+  if (url.includes("/telegram/") || url.includes("service=telegram")) {
+    return ["telegram"];
+  }
+  if (url.includes("/github/") || url.includes("service=github")) {
+    return ["github"];
+  }
+  return ["github", "telegram"];
+}
+
 /**
- * Serverless handler para el endpoint SSE de MCP con capa de seguridad.
+ * Serverless handler para el endpoint SSE de MCP con capa de seguridad y enrutamiento.
  * Establece el stream SSE únicamente para clientes autorizados y soporta POST directo y HEAD.
  */
 export default async function handler(req, res) {
@@ -34,27 +45,22 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 2. Validación de presencia del token de GitHub
-  if (!process.env.GITHUB_PERSONAL_ACCESS_TOKEN) {
-    console.error("Missing GITHUB_PERSONAL_ACCESS_TOKEN environment variable");
-    return res.status(500).json({
-      error: "GITHUB_PERSONAL_ACCESS_TOKEN environment variable is not configured on the server.",
-    });
-  }
+  const enabledServices = resolveServices(req);
 
-  // 3. Si es GET pero no solicita text/event-stream, responder con 200 OK JSON inmediato
+  // 2. Si es GET pero no solicita text/event-stream, responder con 200 OK JSON inmediato
   // para evitar que un validador de URL se quede colgado en el stream y cause Runtime Timeout
   const acceptHeader = req.headers["accept"] || "";
   if (req.method === "GET" && !acceptHeader.includes("text/event-stream") && !req.headers["sec-fetch-dest"]?.includes("eventsource")) {
     return res.status(200).json({
       status: "ok",
-      name: "spark-git-bridge",
+      name: "spark-mcp-router",
       protocol: "mcp-sse",
-      version: "1.0.0",
+      version: "2.0.0",
+      services: enabledServices,
     });
   }
 
-  // 4. Manejo de conexión SSE mediante GET
+  // 3. Manejo de conexión SSE mediante GET
   if (req.method === "GET") {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -66,7 +72,7 @@ export default async function handler(req, res) {
       : "/api/messages";
 
     const transport = new SSEServerTransport(messagesEndpoint, res);
-    const server = createGitHubServer();
+    const server = createMcpServer({ services: enabledServices });
 
     await server.connect(transport);
 
@@ -106,7 +112,7 @@ export default async function handler(req, res) {
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       });
-      const server = createGitHubServer();
+      const server = createMcpServer({ services: enabledServices });
       await server.connect(transport);
 
       await transport.handleRequest(req, res, req.body);

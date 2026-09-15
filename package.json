@@ -1,7 +1,7 @@
 {
-  "name": "spark-git-bridge",
-  "version": "1.0.0",
-  "description": "Serverless GitHub MCP Server bridge for Vercel and Gemini Spark",
+  "name": "spark-mcp-router",
+  "version": "2.0.0",
+  "description": "Serverless Multi-Service MCP Router (GitHub & Telegram) for Gemini Spark on Vercel",
   "type": "module",
   "main": "api/sse.js",
   "scripts": {

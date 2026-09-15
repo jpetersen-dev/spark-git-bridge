@@ -16,14 +16,15 @@ export default async function handler(req, res) {
   }
 
   return res.status(200).json({
-    name: "spark-git-bridge",
+    name: "spark-mcp-router",
     status: "healthy",
     protocol: "mcp",
-    version: "1.0.0",
+    version: "2.0.0",
+    services: ["github", "telegram"],
     endpoints: {
-      mcp: "/api/mcp",
-      sse: "/api/sse",
-      messages: "/api/messages",
+      all: "/api/mcp/:token",
+      github: "/api/mcp/github/:token",
+      telegram: "/api/mcp/telegram/:token",
     },
   });
 }

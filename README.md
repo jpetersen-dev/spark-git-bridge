@@ -1,86 +1,80 @@
-# GitHub MCP Serverless Bridge (para Gemini Spark en Vercel)
+# Spark MCP Router ⚡🤖
 
-Servidor MCP (Model Context Protocol) oficial de GitHub adaptado para ejecutarse como **Serverless Functions en Vercel**. Actúa como un puente privado, seguro y protegido por autenticación que permite a **Gemini Spark** interactuar directamente con tus repositorios, ramas, pull requests, issues y código en GitHub.
+Servidor **MCP (Model Context Protocol) Multi-Servicio Serverless** diseñado para ejecutarse en **Vercel** y conectarse de forma privada y segura con **Gemini Spark**.
 
----
-
-## 🔒 Capa de Seguridad y Autenticación
-
-El servidor cuenta con protección contra accesos no autorizados mediante una clave secreta (`BRIDGE_AUTH_TOKEN`):
-
-- **Sin esta clave**, cualquier intento de conexión (incluso teniendo la URL pública de Vercel) es rechazado de inmediato con un código `401 Unauthorized`.
-- **Doble soporte de autenticación**:
-  1. **Query Param** (Recomendado para SSE): `https://tu-proyecto.vercel.app/api/sse?token=TU_CLAVE_SECRETA`
-  2. **Encabezado HTTP**: `Authorization: Bearer TU_CLAVE_SECRETA` o `x-bridge-token: TU_CLAVE_SECRETA`
+Permite que Gemini Spark actúe como un agente inteligente capaz de consultar y modificar tus repositorios en **GitHub**, al mismo tiempo que envía notificaciones, reportes o interactúa en chats y canales de **Telegram**.
 
 ---
 
-## 📁 Estructura del Proyecto
+## 🌟 Servicios y Herramientas Soportadas (31 en total)
 
-```text
-spark-git-bridge/
-├── api/
-│   ├── sse.js          # Endpoint SSE (GET /api/sse) - Valida acceso e inicia el stream
-│   └── messages.js     # Endpoint POST (/api/messages) - Valida acceso y procesa mensajes
-├── lib/
-│   ├── auth.js         # Middleware de validación de tokens de seguridad
-│   └── server.js       # Registro de las 26 herramientas oficiales y almacén de sesiones
-├── .env.example        # Plantilla con las variables requeridas
-├── .gitignore          # Exclusiones estándar de Git y Vercel
-├── package.json        # Configuración ESM ("type": "module") y dependencias oficiales
-├── vercel.json         # Configuración de tiempo de ejecución (maxDuration: 60)
-└── README.md           # Guía de configuración
-```
+### 🐙 GitHub (26 herramientas oficiales)
+- **Repositorios**: `create_repository`, `search_repositories`, `fork_repository`
+- **Archivos**: `create_or_update_file`, `get_file_contents`, `push_files`
+- **Ramas y Commits**: `create_branch`, `list_commits`
+- **Issues**: `create_issue`, `get_issue`, `list_issues`, `update_issue`, `add_issue_comment`, `search_issues`
+- **Pull Requests**: `create_pull_request`, `get_pull_request`, `list_pull_requests`, `merge_pull_request`, `get_pull_request_files`, `get_pull_request_status`, `update_pull_request_branch`, `get_pull_request_comments`, `get_pull_request_reviews`, `create_pull_request_review`
+- **Búsquedas**: `search_code`, `search_users`
+
+### ✈️ Telegram (5 herramientas)
+- `telegram_send_message`: Envía mensajes de texto, alertas o informes formateados (Markdown o HTML) a un chat o canal.
+- `telegram_get_messages`: Obtiene los últimos mensajes o interacciones recibidas por tu bot.
+- `telegram_send_photo`: Envía imágenes por URL con pie de foto opcional.
+- `telegram_get_me`: Consulta información básica y estado del bot.
+- `telegram_get_chat`: Obtiene detalles sobre un chat o usuario específico.
 
 ---
 
-## ⚙️ Variables de Entorno Requeridas
+## 🔒 Seguridad y Enrutamiento Dinámico
 
-En tu entorno local (`.env.local`) y en Vercel (**Project Settings > Environment Variables**), configura:
+El servidor exige autenticación obligatoria mediante una clave secreta (`BRIDGE_AUTH_TOKEN`). Cualquier petición no autorizada es bloqueada con `401 Unauthorized`.
 
-| Variable | Descripción | Ejemplo |
+Para cumplir con las especificaciones de **Gemini Spark**, la clave se envía en la ruta URL:
+
+| Endpoint | Servicios Habilitados | URL de Conexión en Spark |
 | :--- | :--- | :--- |
-| `BRIDGE_AUTH_TOKEN` | Token secreto que tú eliges para autorizar el acceso al servidor MCP. | `mi_clave_secreta_super_robusta_99` |
-| `GITHUB_PERSONAL_ACCESS_TOKEN` | Token de acceso personal generado en GitHub con permisos de repositorio (`repo`). | `ghp_xxxxxxxxxxxxxxxxxxxx` |
+| **Router Completo** | GitHub + Telegram (31 tools) | `https://tu-proyecto.vercel.app/api/mcp/TU_TOKEN` |
+| **Solo Telegram** | Telegram (5 tools) | `https://tu-proyecto.vercel.app/api/mcp/telegram/TU_TOKEN` |
+| **Solo GitHub** | GitHub (26 tools) | `https://tu-proyecto.vercel.app/api/mcp/github/TU_TOKEN` |
 
-> 💡 **Tip para generar una clave segura**: En tu terminal puedes ejecutar:
-> ```bash
-> openssl rand -hex 24
-> ```
+> ℹ️ **Transporte**: Utiliza **Streamable HTTP (Stateless)**, optimizado para funciones serverless de Vercel con respuesta instantánea a healthchecks (`GET`/`HEAD`) para evitar timeouts.
 
 ---
 
-## 🚀 Despliegue en Vercel
+## ⚙️ Variables de Entorno en Vercel
 
-1. **Mediante CLI de Vercel**:
+Configura estas variables en Vercel (**Project Settings > Environment Variables**):
+
+| Variable | Requerida | Descripción |
+| :--- | :---: | :--- |
+| `BRIDGE_AUTH_TOKEN` | **Sí** | Token secreto que protege el acceso a tu servidor MCP. |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | Para GitHub | Personal Access Token con permisos de repositorio (`repo`). |
+| `TELEGRAM_BOT_TOKEN` | Para Telegram | Token generado con `@BotFather` al crear tu bot. |
+| `TELEGRAM_DEFAULT_CHAT_ID` | Opcional | Tu Chat ID personal para no tener que especificarlo en cada comando. |
+
+---
+
+## 🤖 Cómo configurar Telegram
+
+1. **Crear tu bot**:
+   - Abre Telegram y busca a [@BotFather](https://t.me/BotFather).
+   - Envía `/newbot`, dale un nombre y un username (ej. `MiAsistenteSparkBot`).
+   - Copia el token HTTP API generado (ej. `7123456789:ABCdef...`) y colócalo en Vercel como `TELEGRAM_BOT_TOKEN`.
+2. **Obtener tu Chat ID**:
+   - Inicia conversación con tu nuevo bot en Telegram (haz clic en **Start**).
+   - Abre el bot [@userinfobot](https://t.me/userinfobot) y pulsa iniciar. Te responderá con tu `Id` numérico.
+   - Configúralo en Vercel como `TELEGRAM_DEFAULT_CHAT_ID`.
+
+---
+
+## 🔄 Cambiar el Nombre del Repositorio en GitHub
+
+Si deseas renombrar este repositorio en GitHub (por ejemplo de `spark-git-bridge` a `spark-mcp-router`):
+
+1. Ve a tu repositorio en **GitHub > Settings > General > Repository name**.
+2. Escribe el nuevo nombre (ej: `spark-mcp-router`) y pulsa **Rename**.
+3. En tu terminal local, actualiza la dirección del repositorio remoto:
    ```bash
-   # 1. Configurar variables de entorno en Vercel
-   vercel env add BRIDGE_AUTH_TOKEN
-   vercel env add GITHUB_PERSONAL_ACCESS_TOKEN
-
-   # 2. Desplegar a producción
-   vercel --prod
+   git remote set-url origin https://github.com/jpetersen-dev/spark-mcp-router.git
    ```
-
-2. **Mediante GitHub y Dashboard de Vercel**:
-   - Sube este repositorio a GitHub como privado.
-   - Conéctalo en [Vercel](https://vercel.com/new).
-   - En la sección **Environment Variables**, añade `BRIDGE_AUTH_TOKEN` y `GITHUB_PERSONAL_ACCESS_TOKEN`.
-   - Haz clic en **Deploy**.
-
----
-
-## 🔗 Conexión con Gemini Spark
-
-En la configuración de MCP de **Gemini Spark**:
-
-1. **Tipo de Transporte**: `SSE`
-2. **Server URL**:
-   ```text
-   https://tu-proyecto.vercel.app/api/sse?token=TU_CLAVE_SECRETA
-   ```
-3. Si la herramienta te permite ingresar encabezados (*Headers*):
-   - **URL**: `https://tu-proyecto.vercel.app/api/sse`
-   - **Header**: `Authorization: Bearer TU_CLAVE_SECRETA` (o `x-bridge-token: TU_CLAVE_SECRETA`)
-
-El servidor validará la clave al momento del apretón de manos inicial y mantendrá la conexión segura en cada consulta posterior.
+4. **Vercel** reconoce automáticamente el nuevo nombre de GitHub mediante su ID interno, por lo que tus despliegues seguirán funcionando sin ninguna configuración adicional.

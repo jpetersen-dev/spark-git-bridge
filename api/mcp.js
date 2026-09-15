@@ -1,13 +1,25 @@
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createGitHubServer } from "../lib/server.js";
+import { createMcpServer } from "../lib/server.js";
 import { authenticate } from "../lib/auth.js";
+
+function resolveServices(req) {
+  const url = req.url || "";
+  if (url.includes("/telegram/") || url.includes("service=telegram")) {
+    return ["telegram"];
+  }
+  if (url.includes("/github/") || url.includes("service=github")) {
+    return ["github"];
+  }
+  return ["github", "telegram"];
+}
 
 /**
  * Serverless handler para el protocolo MCP estándar (Streamable HTTP / Stateless).
- * Soporta HEAD, GET (healthcheck o stream) y POST (JSON-RPC) para máxima compatibilidad.
+ * Soporta HEAD, GET (healthcheck o stream) y POST (JSON-RPC).
+ * Enruta dinámicamente servicios (GitHub, Telegram o Ambos).
  */
 export default async function handler(req, res) {
-  console.log(`[MCP-INCOMING] ${req.method} ${req.url}`);
+  console.log(`[MCP-ROUTER] ${req.method} ${req.url}`);
 
   // CORS Headers completos
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -18,12 +30,10 @@ export default async function handler(req, res) {
   );
   res.setHeader("Access-Control-Expose-Headers", "mcp-session-id, mcp-protocol-version");
 
-  // Preflight OPTIONS
   if (req.method === "OPTIONS") {
     return res.status(204).end();
   }
 
-  // Comprobación HEAD inmediata (usada por validadores de URL)
   if (req.method === "HEAD") {
     return res.status(200).end();
   }
@@ -34,24 +44,17 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 2. Verificación de token de GitHub
-  if (!process.env.GITHUB_PERSONAL_ACCESS_TOKEN) {
-    console.error("Missing GITHUB_PERSONAL_ACCESS_TOKEN");
-    return res.status(500).json({
-      error: "GITHUB_PERSONAL_ACCESS_TOKEN is not configured on the server.",
-    });
-  }
+  const enabledServices = resolveServices(req);
 
-  // 3. Comprobación de salud GET (sin Accept: text/event-stream)
-  // Responde de inmediato para evitar que validadores como Gemini se queden esperando
-  // en un stream abierto y sufran Runtime Timeout de Vercel.
+  // 2. Comprobación de salud GET (sin Accept: text/event-stream)
   const acceptHeader = req.headers["accept"] || "";
   if (req.method === "GET" && !acceptHeader.includes("text/event-stream")) {
     return res.status(200).json({
       status: "ok",
-      name: "spark-git-bridge",
+      name: "spark-mcp-router",
       protocol: "mcp",
-      version: "1.0.0",
+      version: "2.0.0",
+      services: enabledServices,
       transport: "streamable-http",
     });
   }
@@ -63,21 +66,21 @@ export default async function handler(req, res) {
 
   try {
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // Sin estado para Serverless
+      sessionIdGenerator: undefined,
     });
 
-    const server = createGitHubServer();
+    const server = createMcpServer({ services: enabledServices });
     await server.connect(transport);
 
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error("[MCP Streamable Error]:", error);
+    console.error("[MCP Router Error]:", error);
     if (!res.headersSent) {
       res.status(500).json({
         jsonrpc: "2.0",
         error: {
           code: -32603,
-          message: error.message || "Internal server error in MCP bridge",
+          message: error.message || "Internal server error in MCP router",
         },
         id: null,
       });
