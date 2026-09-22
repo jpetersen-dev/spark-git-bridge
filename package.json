@@ -1,7 +1,7 @@
 {
   "name": "spark-mcp-router",
-  "version": "2.0.0",
-  "description": "Serverless Multi-Service MCP Router (GitHub & Telegram) for Gemini Spark on Vercel",
+  "version": "2.1.0",
+  "description": "Serverless Multi-Service MCP Router (GitHub, Telegram & Notion) for Gemini Spark on Vercel",
   "type": "module",
   "main": "api/sse.js",
   "scripts": {

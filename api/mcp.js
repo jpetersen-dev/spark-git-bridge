@@ -4,13 +4,16 @@ import { authenticate } from "../lib/auth.js";
 
 function resolveServices(req) {
   const url = req.url || "";
+  if (url.includes("/notion/") || url.includes("service=notion")) {
+    return ["notion"];
+  }
   if (url.includes("/telegram/") || url.includes("service=telegram")) {
     return ["telegram"];
   }
   if (url.includes("/github/") || url.includes("service=github")) {
     return ["github"];
   }
-  return ["github", "telegram"];
+  return ["github", "telegram", "notion"];
 }
 
 /**

@@ -19,12 +19,13 @@ export default async function handler(req, res) {
     name: "spark-mcp-router",
     status: "healthy",
     protocol: "mcp",
-    version: "2.0.0",
-    services: ["github", "telegram"],
+    version: "2.1.0",
+    services: ["github", "telegram", "notion"],
     endpoints: {
       all: "/api/mcp/:token",
       github: "/api/mcp/github/:token",
       telegram: "/api/mcp/telegram/:token",
+      notion: "/api/mcp/notion/:token",
     },
   });
 }
